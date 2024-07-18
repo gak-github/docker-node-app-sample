@@ -1,0 +1,47 @@
+pipeline {
+    agent any
+    environment {
+        registry = '533267332372.dkr.ecr.us-east-1.amazonaws.com/test-app-images'
+    }
+    stages {
+        stage ('Checkout') {
+            steps {
+                checkout scmGit(branches: [[name: '*/main']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/gak-github/docker-node-app-sample.git']])
+            }
+        }
+        
+        stage ('Docker build') {
+            steps {
+                script {
+                    dockerImage = docker.build registry
+                }
+            }
+        }
+        
+        stage ('Docker image push to ECR') {
+            steps {
+                script {
+                    sh 'aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 533267332372.dkr.ecr.us-east-1.amazonaws.com'
+                    sh 'docker push 533267332372.dkr.ecr.us-east-1.amazonaws.com/test-app-images:latest'
+                }
+            }
+        }
+        
+        stage ('Stop the docker container') {
+            steps {
+                script {
+                    sh 'docker ps -f name=mynodeappcontainer -q | xargs --no-run-if-empty docker container stop'
+                    sh 'docker container ls -a -fname=mynodeappcontainer -q | xargs -r docker container rm'
+                }
+            }
+        }
+        
+        stage ('Run the Docker container with newly built image') {
+            steps {
+                script {
+                    sh 'docker run -d -p 8096:3000 --rm --name mynodeappcontainer 533267332372.dkr.ecr.us-east-1.amazonaws.com/test-app-images:latest'
+                }
+            }
+        }
+    }
+}
